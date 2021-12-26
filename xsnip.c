@@ -8,17 +8,23 @@
 #include <sys/types.h>
 #include <pwd.h>
 
+
 #include <png.h>
 #include <X11/Xlib.h>
 #include <X11/X.h>
 #include <X11/Xutil.h>
+#include <X11/Xatom.h>
+#include <X11/Xmu/Atoms.h>
 
 // SAVEDIR is looked for under home directory, recompile as desired
 #define SAVEDIR "/Pictures/"
 
-int32_t create_png(uint8_t* buffer, uint32_t width, uint32_t height, bool save) {
+// POLLRATE (ms) is the biggest determiner of CPU bottleneck
+// A default of 10ms seems to work well on 60hz displays
+#define POLLRATE 10
+
+int32_t create_filename(bool save, char** ts) {
 	time_t cur = time(NULL);
-	char* ts;
 
 	if(save) {
 		const char* home;
@@ -28,22 +34,29 @@ int32_t create_png(uint8_t* buffer, uint32_t width, uint32_t height, bool save) 
 
 		// 29 = ctime + .png + \0
 		uint32_t tsize = strlen(home) + strlen(SAVEDIR) + 29;		
-		ts = malloc(sizeof(char) * tsize);
-		if(!ts) return -1;
+		*ts = malloc(sizeof(char) * tsize);
+		if(!*ts) return -1;
 
-		strncpy(ts, home, strlen(home));
-		strncat(ts, SAVEDIR, strlen(SAVEDIR)+1);
+		strncpy(*ts, home, strlen(home));
+		strncat(*ts, SAVEDIR, strlen(SAVEDIR)+1);
 	} else {
 		// 34 = ctime + /tmp/ + .png + \0
-		ts = malloc(sizeof(char) * 34);
-		if(!ts) return -1;
-		strncpy(ts, "/tmp/", 6);
+		*ts = malloc(sizeof(char) * 34);
+		if(!*ts) return -1;
+		strncpy(*ts, "/tmp/", 6);
 	}
 
 	// intentionally cut off the last 4 bytes of ctime() 
-	strncat(ts, ctime(&cur), 24);
+	strncat(*ts, ctime(&cur), 24);
 
-	strncat(ts, ".png", 6);
+	strncat(*ts, ".png", 6);
+}
+
+int32_t create_png(uint8_t* buffer, uint32_t width, uint32_t height, bool save) {
+	time_t cur = time(NULL);
+	char* ts;
+
+	create_filename(save, &ts);
 
 	printf("creating %s (save=%d)\n", ts, save);
 
@@ -81,6 +94,36 @@ int32_t create_png(uint8_t* buffer, uint32_t width, uint32_t height, bool save) 
 	png_destroy_write_struct(&png, &info);
 
 	return 0;	
+}
+
+void send_empty(Display *display, XSelectionRequestEvent *sev) {
+	XSelectionEvent ssev;
+	
+	// match request (could probably memcpy i think)
+	ssev.type = SelectionNotify;
+	ssev.requestor = sev->requestor;
+	ssev.target = sev->target;
+	ssev.property = None;
+	ssev.time = sev->time;
+
+	XSendEvent(display, sev->requestor, True, NoEventMask, (XEvent*)&ssev);
+}
+
+void send_png(Display* display, XSelectionRequestEvent *sev, Atom png) {
+	XSelectionEvent ssev;
+	uint8_t* buffer;
+
+	XChangeProperty(display, sev->requestor, sev->property, png, 8, PropModeReplace, buffer, strlen(buffer));
+
+	// memcpy!
+	ssev.type = SelectionNotify;
+	ssev.requestor = sev->requestor;
+	ssev.selection = sev->selection;
+	ssev.target = sev->target;
+	ssev.property = sev->property;
+	ssev.time = sev->time;
+
+	XSendEvent(display, sev->requestor, True, NoEventMask, (XEvent*)&ssev);
 }
 
 int main(int argc, char** argv) {
@@ -168,7 +211,7 @@ int main(int argc, char** argv) {
 		}
 		XFlush(display);
 
-		usleep(10000); // n/1000 ms poll rate
+		usleep(POLLRATE * 1000); // experiment as needed
 	}
 
 	if(startx > endx) {
@@ -210,14 +253,53 @@ int main(int argc, char** argv) {
 		}
 	} 
 
+	char* fpath;
+
 	if(create_png(buffer, width, height, save) != 0) {
 		printf("Failed to create png\n");
 		return -1;
+	} 
+
+	XDestroyImage(img);
+	XUnmapWindow(display, overlay);
+
+	if(!save) {
+		// XA_CLIPBOARD() macro is broken
+		Atom sel = XInternAtom(display, "CLIPBOARD", false);
+
+		// MIME type 
+		Atom png = XInternAtom(display, "image/png", false);
+
+		// dummy window to own selection
+		Window win = XCreateSimpleWindow(display, root,
+			-10, -10, 1, 1, 0, 0, 0);			
+		XSetSelectionOwner(display, sel, win, CurrentTime);
+
+		XEvent event;
+		XSelectionRequestEvent *sev;
+
+		// if application closes we lose clipboard, so we poll until
+		// another application takes the selection
+		for(;;) {
+			XNextEvent(display, &event);
+			switch(event.type) {
+				case SelectionClear:
+					printf("Clipboard selection ownership lost\n");
+					return -1;
+					break;
+				case SelectionRequest:
+					sev = (XSelectionRequestEvent*)&event.xselectionrequest;
+					
+					if(sev->target != png || sev->property == None)
+						send_empty(display, sev);
+					else
+						send_png(display, sev, png);
+					break;
+			}
+		}
 	}
 
 	free(buffer);
-	XDestroyImage(img);
-	XUnmapWindow(display, overlay);
 	XCloseDisplay(display);
 	return 0;
 } 

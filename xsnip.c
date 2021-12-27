@@ -191,6 +191,8 @@ int main(int argc, char** argv) {
 		}
 
 		if(grabbing) {
+			// due to the way XDrawRectange works, we always need to
+			// give the upper lefthand corner first
 			bsx = (mousex > startx) ? startx-1 : mousex-1;
 			bsy = (mousey > starty) ? starty-1 : mousey-1;
 
@@ -205,6 +207,7 @@ int main(int argc, char** argv) {
 		usleep(POLLRATE * 1000); // experiment as needed
 	}
 
+	// more corner flipping
 	if(startx > endx) {
 		temp = startx;
 		startx = endx;
@@ -219,6 +222,8 @@ int main(int argc, char** argv) {
 	uint32_t width = endx+1-startx;
 	uint32_t height = endy-starty;
 
+	if(width == 0 || height == 0) return 0;
+
 	XImage* img = XGetImage(display, root, 0, 0, gwa.width, gwa.height, AllPlanes, ZPixmap);
 	uint32_t rmask = img->red_mask;
 	uint32_t gmask = img->green_mask;
@@ -230,6 +235,8 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
+
+	// each pixel is encoded as an integer with colors at bit offset
 	uint32_t c;
 	for(uint32_t h = starty+1; h < endy+1; h++) {
 		for(uint32_t w = startx+1; w < endx+2; w++) {

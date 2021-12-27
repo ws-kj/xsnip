@@ -5,9 +5,9 @@ xsnip is compatible with any window manager, has no graphical interface, has aut
 While most screenshot tools require either a cli flag or a button to save images to the clipboard, xsnip selections made with the left mouse button will automatically be copied.
 
 ## Installation
-xsnip requires xclip for clipboard support, which can usually be installed via your system package manager.
+xsnip requires xclip and libpng, both which can usually be installed via your system package manager.
 
-With xclip installed and repo cloned:
+With dependencies installed and repo cloned:
 
 `make`
 

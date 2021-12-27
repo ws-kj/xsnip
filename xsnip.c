@@ -52,16 +52,12 @@ int32_t create_filename(bool save, char** ts) {
 	strncat(*ts, ".png", 6);
 }
 
-int32_t create_png(uint8_t* buffer, uint32_t width, uint32_t height, bool save) {
+int32_t create_png(uint8_t* buffer, uint32_t width, uint32_t height, bool save, char* ts) {
 	time_t cur = time(NULL);
-	char* ts;
-
-	create_filename(save, &ts);
 
 	printf("creating %s (save=%d)\n", ts, save);
 
 	FILE *fp = fopen(ts, "wb");
-	free(ts);
 	if(!fp) return -1;
 
 	png_bytep row_pointers[height];
@@ -96,26 +92,19 @@ int32_t create_png(uint8_t* buffer, uint32_t width, uint32_t height, bool save) 
 	return 0;	
 }
 
-void send_empty(Display *display, XSelectionRequestEvent *sev) {
+int32_t send_utf8(Display* display, XSelectionRequestEvent *sev, Atom utf8) {
 	XSelectionEvent ssev;
-	
-	// match request (could probably memcpy i think)
-	ssev.type = SelectionNotify;
-	ssev.requestor = sev->requestor;
-	ssev.target = sev->target;
-	ssev.property = None;
-	ssev.time = sev->time;
+	char* an;
 
-	XSendEvent(display, sev->requestor, True, NoEventMask, (XEvent*)&ssev);
-}
+	char* message = "Hello, X11!";
 
-void send_png(Display* display, XSelectionRequestEvent *sev, Atom png) {
-	XSelectionEvent ssev;
-	uint8_t* buffer;
+	an = XGetAtomName(display, sev->property);
+	printf("Sending to window 0x%lx, property '%s'\n", sev->requestor, an);
+	if(an) XFree(an);
 
-	XChangeProperty(display, sev->requestor, sev->property, png, 8, PropModeReplace, buffer, strlen(buffer));
+	XChangeProperty(display, sev->requestor, sev->property, utf8, 8, PropModeReplace, (unsigned char*)message, strlen(message));
 
-	// memcpy!
+
 	ssev.type = SelectionNotify;
 	ssev.requestor = sev->requestor;
 	ssev.selection = sev->selection;
@@ -124,6 +113,8 @@ void send_png(Display* display, XSelectionRequestEvent *sev, Atom png) {
 	ssev.time = sev->time;
 
 	XSendEvent(display, sev->requestor, True, NoEventMask, (XEvent*)&ssev);
+
+	return 0;
 }
 
 int main(int argc, char** argv) {
@@ -254,51 +245,34 @@ int main(int argc, char** argv) {
 	} 
 
 	char* fpath;
+	create_filename(save, &fpath);
 
-	if(create_png(buffer, width, height, save) != 0) {
+	// could use better error handling
+	if(create_png(buffer, width, height, save, fpath) != 0) {
 		printf("Failed to create png\n");
 		return -1;
 	} 
 
+	// I would have liked to do a custom clipboard implementation
+	// but xlib selection handling has little documentation and
+	// many features are completely broken (such as XA_CLIPBOARD).
+	if(!save) {
+		const char* com = "xclip -selection clipboard -target image/png -i '";
+		char* command = malloc(sizeof(char) * (strlen(com) + strlen(fpath) + 2));
+		strncpy(command, com, strlen(com)+1);
+		strncat(command, fpath, strlen(fpath)+1);
+		strncat(command, "'", 2);
+
+		// undesirable solution 
+		system(command);
+
+		free(command);
+	}
+
 	XDestroyImage(img);
 	XUnmapWindow(display, overlay);
 
-	if(!save) {
-		// XA_CLIPBOARD() macro is broken
-		Atom sel = XInternAtom(display, "CLIPBOARD", false);
-
-		// MIME type 
-		Atom png = XInternAtom(display, "image/png", false);
-
-		// dummy window to own selection
-		Window win = XCreateSimpleWindow(display, root,
-			-10, -10, 1, 1, 0, 0, 0);			
-		XSetSelectionOwner(display, sel, win, CurrentTime);
-
-		XEvent event;
-		XSelectionRequestEvent *sev;
-
-		// if application closes we lose clipboard, so we poll until
-		// another application takes the selection
-		for(;;) {
-			XNextEvent(display, &event);
-			switch(event.type) {
-				case SelectionClear:
-					printf("Clipboard selection ownership lost\n");
-					return -1;
-					break;
-				case SelectionRequest:
-					sev = (XSelectionRequestEvent*)&event.xselectionrequest;
-					
-					if(sev->target != png || sev->property == None)
-						send_empty(display, sev);
-					else
-						send_png(display, sev, png);
-					break;
-			}
-		}
-	}
-
+	free(fpath);
 	free(buffer);
 	XCloseDisplay(display);
 	return 0;

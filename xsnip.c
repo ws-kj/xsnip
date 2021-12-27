@@ -64,7 +64,8 @@ int32_t create_filename(bool save, char** ts) {
 	} else {
 		// 34 = ctime + /tmp/ + .png + \0
 		*ts = malloc(sizeof(char) * 34);
-		if(!*ts) return -1;
+		if(!*ts) 
+			return exit_clean("Could not allocate filename\n", -1);
 		strncpy(*ts, "/tmp/", 6);
 	}
 

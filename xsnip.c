@@ -15,6 +15,9 @@
 #include <X11/Xatom.h>
 #include <X11/Xmu/Atoms.h>
 
+// escape key for exiting without screenshot
+#define KQUIT 0x09 
+
 // SAVEDIR is looked for under home directory, recompile as desired
 #define SAVEDIR "/Pictures/"
 
@@ -32,7 +35,7 @@ char*    fpath;
 uint8_t* buffer;
 
 int32_t exit_clean(char* err, int32_t flag) {	
-	XDestroyImage(img);
+	if(img) XDestroyImage(img);
 	XUnmapWindow(display, overlay);
 
 	if(fpath)  free(fpath);
@@ -162,10 +165,16 @@ int main(int argc, char** argv) {
 
 	uint32_t mousex, mousey, mask;
 	uint32_t bsx, bsy, bex, bey;
-
 	bool save = false;
 
 	for(;;) {
+		// quit without screenshot
+		/*
+		XNextEvent(display, &event);
+		if(event.type == KeyPress)
+			if(event.xkey.keycode == KQUIT)
+				return exit_clean(NULL, 0);
+		*/
 		XQueryPointer(display, root, &cw, &rw,
 			&mousex, &mousey, &wx, &wy, &mask);
 
@@ -223,7 +232,6 @@ int main(int argc, char** argv) {
 
 	uint32_t width = endx+1-startx;
 	uint32_t height = endy-starty;
-
 	if(width == 0 || height == 0) return exit_clean(NULL, 0);
 
 	img = XGetImage(display, root, 0, 0, gwa.width, gwa.height, AllPlanes, ZPixmap);

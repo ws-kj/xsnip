@@ -1,11 +1,11 @@
-# xsnip - a minimal selection based screenshot utility for X11
+# xsnip - a minimal and convenient screenshot utility for X11
 Most screenshot utilities compatible with X are clumsy, use bloated toolkits, and often do not support selection regions or the clipboard. 
 xsnip seeks to streamline the screenshot process in a number of ways. 
 xsnip is compatible with any window manager, has no graphical interface, has automatic clipboard support, and is entirely based on selection regions over specific windows. 
-While most screenshot tools require either a cli flag or a button to save images to the clipboard, xsnip selections made with the left mouse button will automatically be copied.
+While most screenshot tools require either a cli flag or a button to save images to the clipboard, xsnip selections made with the left mouse button will automatically be copied, saving time and input.
 
 ## Installation
-xsnip requires xclip and libpng, both which can usually be installed via your system package manager.
+xsnip requires xclip and libpng, both of which can usually be installed via your system package manager.
 
 With dependencies installed and repo cloned:
 

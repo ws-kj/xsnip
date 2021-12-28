@@ -15,15 +15,18 @@
 #include <X11/Xatom.h>
 #include <X11/Xmu/Atoms.h>
 
+/* ----- CONFIGURATION ----- */
 // escape key for exiting without screenshot
-#define KQUIT 0x09 
+#define KQUIT XK_Escape
 
 // SAVEDIR is looked for under home directory, recompile as desired
 #define SAVEDIR "/Pictures/"
 
 // POLLRATE (ms) is the biggest determiner of CPU bottleneck
 // A default of 10ms seems to work well on 60hz displays
+// 
 #define POLLRATE 10
+/* ------------------------- */
 
 // globals so we can exit without leaks on failure anywhere
 Display* display;
@@ -34,6 +37,7 @@ XEvent   event;
 
 char*    fpath;
 uint8_t* buffer;
+uint8_t* keymap;
 
 int32_t exit_clean(char* err) {	
 	if(img) XDestroyImage(img);
@@ -41,7 +45,7 @@ int32_t exit_clean(char* err) {
 
 	if(fpath)  free(fpath);
 	if(buffer) free(buffer);
-
+	if(keymap) free(keymap);
 	XCloseDisplay(display);
 
 	if(err) {
@@ -61,7 +65,7 @@ int32_t create_filename(bool save, char** ts) {
 			home = getpwuid(getuid())->pw_dir;
 		}
 
-		// 29 = ctime + .png + \0
+		// 29 = ctime-4 + .png + \0
 		uint32_t tsize = strlen(home) + strlen(SAVEDIR) + 29;		
 		*ts = malloc(sizeof(char) * tsize);
 		if(!*ts) 
@@ -70,7 +74,7 @@ int32_t create_filename(bool save, char** ts) {
 		strncpy(*ts, home, strlen(home));
 		strncat(*ts, SAVEDIR, strlen(SAVEDIR)+1);
 	} else {
-		// 34 = ctime + /tmp/ + .png + \0
+		// 34 = ctime-4 + /tmp/ + .png + \0
 		*ts = malloc(sizeof(char) * 34);
 		if(!*ts) 
 			return exit_clean("Could not allocate filename\n");
@@ -86,8 +90,6 @@ int32_t create_filename(bool save, char** ts) {
 }
 
 int32_t create_png(uint8_t* buffer, uint32_t width, uint32_t height, bool save, char* ts) {
-	time_t cur = time(NULL);
-
 	printf("creating %s (save=%d)\n", ts, save);
 
 	FILE *fp = fopen(ts, "wb");
@@ -169,18 +171,19 @@ int main(int argc, char** argv) {
 
 	uint32_t startx, starty, endx, endy, temp;
 	bool grabbing = false;
-
 	uint32_t mousex, mousey, mask;
 	uint32_t bsx, bsy, bex, bey;
+
 	bool save = false;
+	keymap = malloc(sizeof(uint8_t) * 32);
 
 	for(;;) {
-		uint8_t* keymap = malloc(sizeof(uint8_t) * 32);
+		// safe exit on keypress instead of forcing user to take a
+		// screenshot with no width/height
 		XQueryKeymap(display, keymap);
-
-		
-
-		free(keymap);
+		KeyCode kc = XKeysymToKeycode(display, KQUIT);
+		bool pressed = !!(keymap[kc>>3] & (1<<(kc&7))); 
+		if(pressed) return exit_clean(NULL);
 
 		XQueryPointer(display, root, &cw, &rw,
 			&mousex, &mousey, &wx, &wy, &mask);
@@ -270,9 +273,7 @@ int main(int argc, char** argv) {
 	create_filename(save, &fpath);
 
 	int32_t png = create_png(buffer, width, height, save, fpath); 
-	if(png != 0) {
-		return png;
-	}
+	if(png != 0) return png;
 
 	// I would have liked to do a custom clipboard implementation
 	// but xlib selection handling has little documentation and
@@ -287,13 +288,11 @@ int main(int argc, char** argv) {
 		strncat(command, fpath, strlen(fpath)+1);
 		strncat(command, "'", 2);
 
-		// undesirable solution 
 		system(command);
 
 		free(command);
 	}
 
 	exit_clean(NULL);
-
 	return 0;
 } 

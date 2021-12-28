@@ -26,3 +26,4 @@ It is recommended that you assign xsnip to a keybind in your window manager for 
 
 ## Configuration
 The saved screenshot directory, poll rate, quit key, and cursor glyph can all be changed from their default values by editing the corresponding macros at the top of `xsnip.c` and recompiling.
+

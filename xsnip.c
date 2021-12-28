@@ -12,10 +12,10 @@
 #include <X11/Xlib.h>
 #include <X11/X.h>
 #include <X11/Xutil.h>
-#include <X11/Xatom.h>
-#include <X11/Xmu/Atoms.h>
+#include <X11/cursorfont.h>
 
 /* ----- CONFIGURATION ----- */
+
 // escape key for exiting without screenshot
 #define KQUIT XK_Escape
 
@@ -24,8 +24,10 @@
 
 // POLLRATE (ms) is the biggest determiner of CPU bottleneck
 // A default of 10ms seems to work well on 60hz displays
-// 
 #define POLLRATE 10
+
+// Cursor image during selection
+#define CURSOR XC_crosshair
 /* ------------------------- */
 
 // globals so we can exit without leaks on failure anywhere
@@ -34,6 +36,7 @@ Window   root;
 Window   overlay;
 XImage*  img;
 XEvent   event;
+Cursor   cursor;
 
 char*    fpath;
 uint8_t* buffer;
@@ -42,6 +45,7 @@ uint8_t* keymap;
 int32_t exit_clean(char* err) {	
 	if(img) XDestroyImage(img);
 	XUnmapWindow(display, overlay);
+	XFreeCursor(display, cursor);
 
 	if(fpath)  free(fpath);
 	if(buffer) free(buffer);
@@ -147,6 +151,8 @@ int main(int argc, char** argv) {
 	attrs.background_pixel = 0;
 	attrs.border_pixel = 0;
 
+	// We create a transparent window so that drawing the box
+	// doesn't mess with running programs.  
 	overlay = XCreateWindow(
 		display, root,
 		0, 0, gwa.width, gwa.height, 0,
@@ -165,9 +171,12 @@ int main(int argc, char** argv) {
 
 	GC gc;
 	gc = XCreateGC(display, overlay, GCFunction | GCForeground | GCBackground | GCSubwindowMode, &gcval);
+	
+	cursor = XCreateFontCursor(display, CURSOR);
+	XDefineCursor(display, overlay, cursor);
 
-	uint32_t wx, wy;		// junk
-	Window cw, rw;			// junk
+	uint32_t wx, wy;		// Junk
+	Window cw, rw;			// Junk
 
 	uint32_t startx, starty, endx, endy, temp;
 	bool grabbing = false;
@@ -176,10 +185,9 @@ int main(int argc, char** argv) {
 
 	bool save = false;
 	keymap = malloc(sizeof(uint8_t) * 32);
-
 	for(;;) {
-		// safe exit on keypress instead of forcing user to take a
-		// screenshot with no width/height
+		// Safe exit on keypress instead of forcing user to take a
+		// screenshot with no width/height.
 		XQueryKeymap(display, keymap);
 		KeyCode kc = XKeysymToKeycode(display, KQUIT);
 		bool pressed = !!(keymap[kc>>3] & (1<<(kc&7))); 
@@ -188,14 +196,14 @@ int main(int argc, char** argv) {
 		XQueryPointer(display, root, &cw, &rw,
 			&mousex, &mousey, &wx, &wy, &mask);
 
-		if(mask == 256) {			// left click
+		if(mask == 256) {			// Left click
 			if(!grabbing) {
 				save = false;
 				grabbing = true;
 				startx = mousex;
 				starty = mousey;
 			} 
-		} else if(mask == 1024) {	// right click
+		} else if(mask == 1024) {	// Right click
 			if(!grabbing) {
 				save = true;
 				grabbing = true;
@@ -212,8 +220,8 @@ int main(int argc, char** argv) {
 		}
 
 		if(grabbing) {
-			// due to the way XDrawRectange works, we always need to
-			// give the upper lefthand corner first
+			// Due to the way XDrawRectange works, we always need to
+			// pass the upper lefthand corner first.
 			bsx = (mousex > startx) ? startx-1 : mousex-1;
 			bsy = (mousey > starty) ? starty-1 : mousey-1;
 
@@ -225,10 +233,10 @@ int main(int argc, char** argv) {
 		}
 		XFlush(display);
 
-		usleep(POLLRATE * 1000); // experiment as needed
+		usleep(POLLRATE * 1000); // Experiment as needed.
 	}
 
-	// more corner flipping
+	// More corner flipping.
 	if(startx > endx) {
 		temp = startx;
 		startx = endx;
@@ -254,8 +262,7 @@ int main(int argc, char** argv) {
 		return exit_clean("Could not allocate image buffer\n");
 	}
 
-
-	// each pixel is encoded as an integer with colors at bit offset
+	// Each pixel is encoded as an integer with colors at bit offset.
 	uint32_t c;
 	for(uint32_t h = starty+1; h < endy+1; h++) {
 		for(uint32_t w = startx+1; w < endx+2; w++) {

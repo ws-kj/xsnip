@@ -43,9 +43,10 @@
 
 // Cursor image during selection
 #define CURSOR XC_crosshair
+
 /* ------------------------- */
 
-// globals so we can exit without leaks on failure anywhere
+// Globals so we can exit without leaks on failure anywhere
 Display* display;
 Window   root;
 Window   overlay;
@@ -74,7 +75,7 @@ int32_t exit_clean(char* err) {
 	return 0;
 }
 
-// nasty string manipulation everywhere :D
+// Pretty ugly but should be safe.
 int32_t create_filename(bool save, char** ts) {
 	time_t cur = time(NULL);
 

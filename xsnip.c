@@ -30,11 +30,12 @@ Display* display;
 Window   root;
 Window   overlay;
 XImage*  img;
+XEvent   event;
 
 char*    fpath;
 uint8_t* buffer;
 
-int32_t exit_clean(char* err, int32_t flag) {	
+int32_t exit_clean(char* err) {	
 	if(img) XDestroyImage(img);
 	XUnmapWindow(display, overlay);
 
@@ -43,10 +44,14 @@ int32_t exit_clean(char* err, int32_t flag) {
 
 	XCloseDisplay(display);
 
-	if(err) fprintf(stderr, err);
-
-	return flag;
+	if(err) {
+		fprintf(stderr, err);
+		return 1;
+	}
+	return 0;
 }
+
+// nasty string manipulation everywhere :D
 int32_t create_filename(bool save, char** ts) {
 	time_t cur = time(NULL);
 
@@ -60,7 +65,7 @@ int32_t create_filename(bool save, char** ts) {
 		uint32_t tsize = strlen(home) + strlen(SAVEDIR) + 29;		
 		*ts = malloc(sizeof(char) * tsize);
 		if(!*ts) 
-			return exit_clean("Could not allocate filename\n", -1);
+			return exit_clean("Could not allocate filename\n");
 
 		strncpy(*ts, home, strlen(home));
 		strncat(*ts, SAVEDIR, strlen(SAVEDIR)+1);
@@ -68,7 +73,7 @@ int32_t create_filename(bool save, char** ts) {
 		// 34 = ctime + /tmp/ + .png + \0
 		*ts = malloc(sizeof(char) * 34);
 		if(!*ts) 
-			return exit_clean("Could not allocate filename\n", -1);
+			return exit_clean("Could not allocate filename\n");
 		strncpy(*ts, "/tmp/", 6);
 	}
 
@@ -76,6 +81,8 @@ int32_t create_filename(bool save, char** ts) {
 	strncat(*ts, ctime(&cur), 24);
 
 	strncat(*ts, ".png", 6);
+
+	return 0;
 }
 
 int32_t create_png(uint8_t* buffer, uint32_t width, uint32_t height, bool save, char* ts) {
@@ -85,7 +92,7 @@ int32_t create_png(uint8_t* buffer, uint32_t width, uint32_t height, bool save, 
 
 	FILE *fp = fopen(ts, "wb");
 	if(!fp) 
-		return exit_clean("Could not open png for writing\n", -1);
+		return exit_clean("Could not open png for writing\n");
 
 	png_bytep row_pointers[height];
 	for(uint32_t i = 0; i < height; i++) {
@@ -94,14 +101,14 @@ int32_t create_png(uint8_t* buffer, uint32_t width, uint32_t height, bool save, 
 
 	png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
 	if(!png) 
-		return exit_clean("Could not create png write struct\n", -1);
+		return exit_clean("Could not create png write struct\n");
 
 	png_infop info = png_create_info_struct(png);
 	if (!info) 
-		return exit_clean("Could not create png info struct\n", -1);
+		return exit_clean("Could not create png info struct\n");
 
 	if(setjmp(png_jmpbuf(png)))
-		return exit_clean("Could not set png jmpbuf\n", -1);
+		return exit_clean("Could not set png jmpbuf\n");
 
 	png_init_io(png, fp);
 
@@ -168,13 +175,13 @@ int main(int argc, char** argv) {
 	bool save = false;
 
 	for(;;) {
-		// quit without screenshot
-		/*
-		XNextEvent(display, &event);
-		if(event.type == KeyPress)
-			if(event.xkey.keycode == KQUIT)
-				return exit_clean(NULL, 0);
-		*/
+		uint8_t* keymap = malloc(sizeof(uint8_t) * 32);
+		XQueryKeymap(display, keymap);
+
+		
+
+		free(keymap);
+
 		XQueryPointer(display, root, &cw, &rw,
 			&mousex, &mousey, &wx, &wy, &mask);
 
@@ -232,7 +239,7 @@ int main(int argc, char** argv) {
 
 	uint32_t width = endx+1-startx;
 	uint32_t height = endy-starty;
-	if(width == 0 || height == 0) return exit_clean(NULL, 0);
+	if(width == 0 || height == 0) return exit_clean(NULL);
 
 	img = XGetImage(display, root, 0, 0, gwa.width, gwa.height, AllPlanes, ZPixmap);
 	uint32_t rmask = img->red_mask;
@@ -241,7 +248,7 @@ int main(int argc, char** argv) {
 
 	uint8_t* buffer = malloc(sizeof(uint8_t) * width * height * 3);
 	if(!buffer) {
-		return exit_clean("Could not allocate image buffer\n", -1);
+		return exit_clean("Could not allocate image buffer\n");
 	}
 
 
@@ -274,7 +281,7 @@ int main(int argc, char** argv) {
 		const char* com = "xclip -selection clipboard -target image/png -i '";
 		char* command = malloc(sizeof(char) * (strlen(com) + strlen(fpath) + 2));
 		if(!command)
-			return exit_clean("Could not allocate command\n", -1);
+			return exit_clean("Could not allocate command\n");
 
 		strncpy(command, com, strlen(com)+1);
 		strncat(command, fpath, strlen(fpath)+1);
@@ -286,7 +293,7 @@ int main(int argc, char** argv) {
 		free(command);
 	}
 
-	exit_clean(NULL, 0);
+	exit_clean(NULL);
 
 	return 0;
 } 

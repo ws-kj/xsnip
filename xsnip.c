@@ -69,7 +69,7 @@ int32_t exit_clean(char* err) {
 	XCloseDisplay(display);
 
 	if(err) {
-		fprintf(stderr, err);
+		fprintf(stderr, "%s", err);
 		return 1;
 	}
 	return 0;

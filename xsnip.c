@@ -279,7 +279,7 @@ int main(int argc, char** argv) {
 	}
 
 	// Each pixel is encoded as an integer with colors at bit offset.
-	uint32_t c;
+	uint32_t c = 0;
 	for(uint32_t h = starty+1; h < endy+1; h++) {
 		for(uint32_t w = startx+1; w < endx+2; w++) {
 			uint32_t pix = XGetPixel(img, w, h);

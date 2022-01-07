@@ -37,7 +37,6 @@ Display* display;
 Window   root;
 Window   overlay;
 XImage*  img;
-XEvent   event;
 Cursor   cursor;
 
 char*    fpath;

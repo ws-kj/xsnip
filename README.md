@@ -14,6 +14,7 @@ With dependencies installed and repo cloned:
 `make install` 
 
 ## Usage
+
 Click and drag anywhere on the screen to make a selection.
 
 A selection made with the left mouse button will be automatically copied to the clipboard.
@@ -27,3 +28,4 @@ It is recommended that you assign xsnip to a keybind in your window manager for 
 ## Configuration
 The saved screenshot directory, poll rate, quit key, and cursor glyph can all be changed from their default values by editing the corresponding macros at the top of `xsnip.c` and recompiling.
 
+If you experience strange behavior when the program is running, such as a black or blurry screen, recompile with the `OPAQUE` macro set to `true`. You should also do this if your window manager/compositor does not support transparency.

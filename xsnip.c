@@ -13,6 +13,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -29,22 +30,7 @@
 #include <X11/Xutil.h>
 #include <X11/cursorfont.h>
 
-/* ----- CONFIGURATION ----- */
-
-// escape key for exiting without screenshot
-#define KQUIT XK_Escape
-
-// SAVEDIR is looked for under home directory, recompile as desired
-#define SAVEDIR "/Pictures/"
-
-// POLLRATE (ms) is the biggest determiner of CPU bottleneck
-// A default of 10ms seems to work well on 60hz displays
-#define POLLRATE 10
-
-// Cursor image during selection
-#define CURSOR XC_crosshair
-
-/* ------------------------- */
+#include "config.h"
 
 // Globals so we can exit without leaks on failure anywhere
 Display* display;
@@ -157,15 +143,30 @@ int main(int argc, char** argv) {
 
 	XWindowAttributes gwa;
 	XGetWindowAttributes(display, root, &gwa);	
-	
 	XVisualInfo vinfo;
-	XMatchVisualInfo(display, DefaultScreen(display), 32, TrueColor, &vinfo);
+
+	// If there are compositor issues (black screen or blur) we can
+	// create a 24 bit image and paint a temporary screenshot onto it
+	// to achieve the same effect as a fully transparent 32 bit image.
+	if(OPAQUE)
+		XMatchVisualInfo(display, DefaultScreen(display), 24, TrueColor, &vinfo);
+	else
+		XMatchVisualInfo(display, DefaultScreen(display), 32, TrueColor, &vinfo);
 
 	XSetWindowAttributes attrs;
 	attrs.override_redirect = true;
 	attrs.colormap = XCreateColormap(display, root, vinfo.visual, AllocNone);
 	attrs.background_pixel = 0;
 	attrs.border_pixel = 0;
+
+	// This is somewhat scuffed but we need to send an exposure event
+	// otherwise the temp screenshot will sometimes be blank.
+	if(OPAQUE) {
+		XSelectInput(display, root, ExposureMask);
+		XEvent evt;
+		XSendEvent(display, root, true, ExposureMask, &evt);
+		img = XGetImage(display, root, 0, 0, gwa.width, gwa.height, AllPlanes, ZPixmap);
+	}
 
 	// We create a transparent window so that drawing the box
 	// doesn't mess with running programs.  
@@ -178,16 +179,16 @@ int main(int argc, char** argv) {
 		&attrs);
 	XMapWindow(display, overlay);
 
+	GC gc;
 	XGCValues gcval;
 	gcval.foreground = XWhitePixel(display, 0);
 	gcval.function = GXxor;
 	gcval.background = XBlackPixel(display, 0);
 	gcval.plane_mask = gcval.background ^ gcval.foreground;
 	gcval.subwindow_mode = IncludeInferiors;
-
-	GC gc;
 	gc = XCreateGC(display, overlay, GCFunction | GCForeground | GCBackground | GCSubwindowMode, &gcval);
-	
+
+
 	cursor = XCreateFontCursor(display, CURSOR);
 	XDefineCursor(display, overlay, cursor);
 
@@ -199,9 +200,13 @@ int main(int argc, char** argv) {
 	uint32_t mousex, mousey, mask;
 	uint32_t bsx, bsy, bex, bey;
 
+	XEvent evt;
+	if(OPAQUE)
+		XSelectInput(display, overlay, ExposureMask);
+
 	bool save = false;
 	keymap = malloc(sizeof(uint8_t) * 32);
-	for(;;) {
+	for(;;) {	
 		// Safe exit on keypress instead of forcing user to take a
 		// screenshot with no width/height.
 		XQueryKeymap(display, keymap);
@@ -235,6 +240,9 @@ int main(int argc, char** argv) {
 			}
 		}
 
+		if(OPAQUE)
+			XPutImage(display, overlay, XCreateGC(display, overlay, 0, 0), img, 0, 0, 0, 0, gwa.width, gwa.height);	
+		
 		if(grabbing) {
 			// Due to the way XDrawRectange works, we always need to
 			// pass the upper lefthand corner first.
@@ -244,8 +252,16 @@ int main(int argc, char** argv) {
 			bex = (mousex > startx) ? mousex-startx+3 : startx-mousex+3;
 			bey = (mousey > starty) ? mousey-starty+3 : starty-mousey+1;
 
-			XClearArea(display, overlay, 0, 0, gwa.width, gwa.height, false);
-			XDrawRectangle(display, overlay, gc, bsx, bsy, bex, bey);
+			if(!OPAQUE) {
+				XClearArea(display, overlay, 0, 0, gwa.width, gwa.height, false);
+				XDrawRectangle(display, overlay, gc, bsx, bsy, bex, bey);
+			} else {
+				// This works, but the Exposure event is not being 
+				// properly generated which causes flickering. 
+				XSendEvent(display, root, true, ExposureMask, &evt);
+				XDrawRectangle(display, overlay, gc, bsx, bsy, bex, bey);
+			}
+		
 		}
 		XFlush(display);
 

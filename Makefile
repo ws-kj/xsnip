@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-g -I. -lX11 -lpng
-DEPS= 
+DEPS=config.h 
 OBJ=xsnip.c
 
 prefix=/usr/local

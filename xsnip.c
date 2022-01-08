@@ -230,7 +230,6 @@ int main(int argc, char** argv) {
 
 		XQueryPointer(display, root, &cw, &rw,
 			&mousex, &mousey, &wx, &wy, &mask);
-		mask -= 16;
 
 		if(mask == 256) {			// Left click
 			if(!grabbing) {

@@ -36,7 +36,11 @@ Window   root;
 Window   overlay;
 XImage*  img;
 Cursor   cursor;
-Pixmap pm;
+Pixmap 	 pm;
+GC 	     gc;
+#if OPAQUE
+GC 		 empty_gc;
+#endif
 
 char*    fpath;
 uint8_t* buffer;
@@ -47,6 +51,10 @@ int32_t exit_clean(char* err) {
 	if(pm)  XFreePixmap(display, pm);
 	XUnmapWindow(display, overlay);
 	XFreeCursor(display, cursor);
+	XFreeGC(display, gc);
+	#if OPAQUE
+	XFreeGC(display, empty_gc);
+	#endif
 
 	if(fpath)  free(fpath);
 	if(buffer) free(buffer);
@@ -147,10 +155,11 @@ int main(int argc, char** argv) {
 	// If there are compositor issues (black screen or blur) we can
 	// create a 24 bit image and paint a temporary screenshot onto it
 	// to achieve the same effect as a fully transparent 32 bit image.
-	if(OPAQUE)
+	#if OPAQUE
 		XMatchVisualInfo(display, DefaultScreen(display), 24, TrueColor, &vinfo);
-	else
+	#else
 		XMatchVisualInfo(display, DefaultScreen(display), 32, TrueColor, &vinfo);
+	#endif
 
 	XSetWindowAttributes attrs;
 	attrs.override_redirect = true;
@@ -160,12 +169,12 @@ int main(int argc, char** argv) {
 
 	// This is somewhat scuffed but we need to send an exposure event
 	// otherwise the temp screenshot will sometimes be blank.
-	if(OPAQUE) {
+	#if OPAQUE
 		XSelectInput(display, root, ExposureMask);
 		XEvent evt;
 		XSendEvent(display, root, true, ExposureMask, &evt);
 		img = XGetImage(display, root, 0, 0, gwa.width, gwa.height, AllPlanes, ZPixmap);	
-	}
+	#endif
 
 	// We create a transparent window so that drawing the box
 	// doesn't mess with running programs.  
@@ -178,14 +187,14 @@ int main(int argc, char** argv) {
 		&attrs);
 
 	// Must be done after overlay is created
-	if(OPAQUE) {
+	#if OPAQUE
 		pm = XCreatePixmap(display, overlay, gwa.width, gwa.height, 24);
-		XPutImage(display, overlay, XCreateGC(display, overlay, 0, 0), img, 0, 0, 0, 0, gwa.width, gwa.height);	
-	}
+		empty_gc = XCreateGC(display, overlay, 0, 0);
+		XPutImage(display, overlay, empty_gc, img, 0, 0, 0, 0, gwa.width, gwa.height);	
+	#endif
 
 	XMapWindow(display, overlay);
 
-	GC gc;
 	XGCValues gcval;
 	gcval.foreground = XWhitePixel(display, 0);
 	gcval.function = GXxor;
@@ -205,9 +214,9 @@ int main(int argc, char** argv) {
 	uint32_t mousex, mousey, mask;
 	uint32_t bsx, bsy, bex, bey;
 
-	XEvent evt;
-	if(OPAQUE)
+	#if OPAQUE
 		XSelectInput(display, overlay, ExposureMask);
+	#endif
 
 	bool save = false;
 	keymap = malloc(sizeof(uint8_t) * 32);
@@ -221,6 +230,7 @@ int main(int argc, char** argv) {
 
 		XQueryPointer(display, root, &cw, &rw,
 			&mousex, &mousey, &wx, &wy, &mask);
+		mask -= 16;
 
 		if(mask == 256) {			// Left click
 			if(!grabbing) {
@@ -245,10 +255,11 @@ int main(int argc, char** argv) {
 			}
 		}
 
-		if(OPAQUE)
-			XPutImage(display, pm, XCreateGC(display, overlay, 0, 0), img, 0, 0, 0, 0, gwa.width, gwa.height);	
-		else
+		#if OPAQUE
+			XPutImage(display, pm, empty_gc, img, 0, 0, 0, 0, gwa.width, gwa.height);	
+		#else
 			XClearArea(display, overlay, 0, 0, gwa.width, gwa.height, false);
+		#endif
 
 		if(grabbing) {
 			// Due to the way XDrawRectange works, we always need to
@@ -258,16 +269,17 @@ int main(int argc, char** argv) {
 
 			bex = (mousex > startx) ? mousex-startx+3 : startx-mousex+3;
 			bey = (mousey > starty) ? mousey-starty+3 : starty-mousey+1;
-			if(OPAQUE)
+			#if OPAQUE
 				XDrawRectangle(display, pm, gc, bsx, bsy, bex, bey);
-			else
+			#else
 				XDrawRectangle(display, overlay, gc, bsx, bsy, bex, bey);
+			#endif
 		}
 
-		if(OPAQUE) {
+		#if OPAQUE
 			XClearArea(display, overlay, 0, 0, gwa.width, gwa.height, false);
 			XSetWindowBackgroundPixmap(display, overlay, pm);
-		}
+		#endif
 
 		XFlush(display);
 		usleep(POLLRATE * 1000); // Experiment as needed.

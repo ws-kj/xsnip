@@ -38,10 +38,14 @@ XImage*  img;
 Cursor   cursor;
 Pixmap   pm;
 GC 		 gc;
+XWindowAttributes hoverw;
 
 char*    fpath;
 uint8_t* buffer;
 uint8_t* keymap;
+
+// Set to config setting as default but can be override with -o or -t
+bool opaque_mode = OPAQUE;	
 
 int32_t exit_clean(char* err) {	
 	if(img) XDestroyImage(img);
@@ -139,10 +143,27 @@ int32_t create_png(uint8_t* buffer, uint32_t width, uint32_t height, bool save, 
 }
 
 int main(int argc, char** argv) {
+	// Primitive but really all that's needed
+	// TODO add help command and handle this better
+	if(argc > 1) {
+		if(!strcmp(argv[1], "-o"))
+			opaque_mode = true;
+		else if(!strcmp(argv[1], "-t"))
+			opaque_mode = false;	
+	}
+
 	display = XOpenDisplay(NULL);
 	if(!display) 
 		exit_clean("Failed to open X display\n");
 	root = DefaultRootWindow(display);
+
+	// Query windows for hover selection. This may result in undefined
+	// behavior if a window is opened while the overlay is displayed.
+	Window r_ret, p_ret;
+	Window* wins;
+	uint32_t nwins;
+	uint32_t hovn;
+	XQueryTree(display, root, &r_ret, &p_ret, &wins, &nwins);
 
 	XWindowAttributes gwa;
 	XGetWindowAttributes(display, root, &gwa);	
@@ -151,7 +172,7 @@ int main(int argc, char** argv) {
 	// If there are compositor issues (black screen or blur) we can
 	// create a 24 bit image and paint a temporary screenshot onto it
 	// to achieve the same effect as a fully transparent 32 bit image.
-	if(OPAQUE)
+	if(opaque_mode)
 		XMatchVisualInfo(display, DefaultScreen(display), 24, TrueColor, &vinfo);
 	else
 		XMatchVisualInfo(display, DefaultScreen(display), 32, TrueColor, &vinfo);
@@ -164,15 +185,17 @@ int main(int argc, char** argv) {
 
 	// This is somewhat scuffed but we need to send an exposure event
 	// otherwise the temp screenshot will sometimes be blank.
-	if(OPAQUE) {
+	if(opaque_mode) {
 		XSelectInput(display, root, ExposureMask);
 		XEvent evt;
 		XSendEvent(display, root, true, ExposureMask, &evt);
 		img = XGetImage(display, root, 0, 0, gwa.width, gwa.height, AllPlanes, ZPixmap);	
 	}
 
-	// We create a transparent window so that drawing the box
-	// doesn't mess with running programs.  
+
+	// If compositor supports transparency we can create a transpraent
+	// window overlay which is pretty efficient. Otherwise we have to
+	// take a temp screenshot and draw it to the overlay instead.
 	overlay = XCreateWindow(
 		display, root,
 		0, 0, gwa.width, gwa.height, 0,
@@ -182,7 +205,7 @@ int main(int argc, char** argv) {
 		&attrs);
 
 	// Must be done after overlay is created
-	if(OPAQUE) {
+	if(opaque_mode) {
 		pm = XCreatePixmap(display, overlay, gwa.width, gwa.height, 24);
 		XPutImage(display, overlay, XCreateGC(display, overlay, 0, 0), img, 0, 0, 0, 0, gwa.width, gwa.height);	
 	}
@@ -208,10 +231,6 @@ int main(int argc, char** argv) {
 	uint32_t mousex, mousey, mask;
 	uint32_t bsx, bsy, bex, bey;
 
-	XEvent evt;
-	if(OPAQUE)
-		XSelectInput(display, overlay, ExposureMask);
-
 	bool save = false;
 	keymap = malloc(sizeof(uint8_t) * 32);
 	for(;;) {	
@@ -219,11 +238,23 @@ int main(int argc, char** argv) {
 		// screenshot with no width/height.
 		XQueryKeymap(display, keymap);
 		KeyCode kc = XKeysymToKeycode(display, KQUIT);
-		bool pressed = !!(keymap[kc>>3] & (1<<(kc&7))); 
+		bool pressed = !!(keymap[kc>>3] & (1<<(kc&7))); // Esc key 
 		if(pressed) return exit_clean(NULL);
 
 		XQueryPointer(display, root, &cw, &rw,
 			&mousex, &mousey, &wx, &wy, &mask);
+
+		XWindowAttributes a;
+		for(uint32_t i=1; i<nwins; i++) {
+			XGetWindowAttributes(display, wins[i], &a);
+			if(mousex >= a.x && mousex <= a.x+a.width  &&
+			   mousey >= a.y && mousey <= a.y+a.height &&
+			   a.map_state == IsViewable) {
+				hoverw = a;
+				hovn   = i;
+				XGetGeometry(display, wins[i], &cw, &bsx, &bsy, &bex, &bey, &wx, &wy);
+			}
+		}
 
 		if(mask == 256) {			// Left click
 			if(!grabbing) {
@@ -248,7 +279,7 @@ int main(int argc, char** argv) {
 			}
 		}
 
-		if(OPAQUE)
+		if(opaque_mode)
 			XPutImage(display, pm, XCreateGC(display, overlay, 0, 0), img, 0, 0, 0, 0, gwa.width, gwa.height);	
 		else
 			XClearArea(display, overlay, 0, 0, gwa.width, gwa.height, false);
@@ -261,61 +292,88 @@ int main(int argc, char** argv) {
 
 			bex = (mousex > startx) ? mousex-startx+3 : startx-mousex+3;
 			bey = (mousey > starty) ? mousey-starty+3 : starty-mousey+1;
-			if(OPAQUE)
-				XDrawRectangle(display, pm, gc, bsx, bsy, bex, bey);
-			else
-				XDrawRectangle(display, overlay, gc, bsx, bsy, bex, bey);
 		}
 
-		if(OPAQUE) {
+		if(opaque_mode) {
+			XDrawRectangle(display, pm, gc, bsx, bsy, bex, bey);
 			XClearArea(display, overlay, 0, 0, gwa.width, gwa.height, false);
 			XSetWindowBackgroundPixmap(display, overlay, pm);
+		} else {
+			XDrawRectangle(display, overlay, gc, bsx, bsy, bex, bey);
 		}
 
 		XFlush(display);
 		usleep(POLLRATE * 1000); // Experiment as needed.
 	}
+	uint32_t width, height;
+	// If the user clicks on a window we use X to take a screenshot
+	// of that window directly instead of doing the selection rect.
+	if(startx == endx || starty == endy) {
+		width  = hoverw.width;
+		height = hoverw.height;
 
-	// More corner flipping.
-	if(startx > endx) {
-		temp = startx;
-		startx = endx;
-		endx = temp;
-	}
-	if(starty > endy) {
-		temp = starty;
-		starty = endy;
-		endy = temp;
-	}
-
-	uint32_t width = endx+1-startx;
-	uint32_t height = endy-starty;
-	if(width == 0 || height == 0) return exit_clean(NULL);
-
-	img = XGetImage(display, root, 0, 0, gwa.width, gwa.height, AllPlanes, ZPixmap);
-	uint32_t rmask = img->red_mask;
-	uint32_t gmask = img->green_mask;
-	uint32_t bmask = img->blue_mask;
-
-	uint8_t* buffer = malloc(sizeof(uint8_t) * width * height * 3);
-	if(!buffer) {
-		return exit_clean("Could not allocate image buffer\n");
-	}
-
-	// Each pixel is encoded as an integer with colors at bit offset.
-	uint32_t c = 0;
-	for(uint32_t h = starty+1; h < endy+1; h++) {
-		for(uint32_t w = startx+1; w < endx+2; w++) {
-			uint32_t pix = XGetPixel(img, w, h);
-			uint8_t r = (pix & rmask) >> 16;
-			uint8_t g = (pix & gmask) >> 8;
-			uint8_t b = pix & bmask;
-
-			buffer[c++] = r;
-			buffer[c++] = g;
-			buffer[c++] = b;
+		img = XGetImage(display, wins[hovn], 0, 0, width, height, AllPlanes, ZPixmap);
+		uint32_t rmask = img->red_mask;
+		uint32_t gmask = img->green_mask;
+		uint32_t bmask = img->blue_mask;
+		
+		buffer = malloc(sizeof(uint8_t) * width * height * 3);
+		if(!buffer) {
+			return exit_clean("Could not allocate image buffer\n");
 		}
-	} 
+		uint32_t c = 0;
+		for(uint32_t h = 0; h < height; h++) {
+			for(uint32_t w = 0; w < width; w++) {
+				uint32_t pix = XGetPixel(img, w, h);
+				uint8_t r = (pix & rmask) >> 16;
+				uint8_t g = (pix & gmask) >> 8;
+				uint8_t b = pix & bmask;
+
+				buffer[c++] = r;
+				buffer[c++] = g;
+				buffer[c++] = b;
+			}
+		} 
+	} else {
+		// More corner flipping.
+		if(startx > endx) {
+			temp = startx;
+			startx = endx;
+			endx = temp;
+		}
+		if(starty > endy) {
+			temp = starty;
+			starty = endy;
+			endy = temp;
+		}
+
+		width = endx+1-startx;
+		height = endy-starty;
+
+		img = XGetImage(display, root, 0, 0, gwa.width, gwa.height, AllPlanes, ZPixmap);
+		uint32_t rmask = img->red_mask;
+		uint32_t gmask = img->green_mask;
+		uint32_t bmask = img->blue_mask;
+
+		buffer = malloc(sizeof(uint8_t) * width * height * 3);
+		if(!buffer) {
+			return exit_clean("Could not allocate image buffer\n");
+		}
+
+		uint32_t c = 0;
+		for(uint32_t h = starty+1; h < endy+1; h++) {
+			for(uint32_t w = startx+1; w < endx+2; w++) {
+				uint32_t pix = XGetPixel(img, w, h);
+				uint8_t r = (pix & rmask) >> 16;
+				uint8_t g = (pix & gmask) >> 8;
+				uint8_t b = pix & bmask;
+
+				buffer[c++] = r;
+				buffer[c++] = g;
+				buffer[c++] = b;
+			}
+		} 
+	}
 
 	create_filename(save, &fpath);
 

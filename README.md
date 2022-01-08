@@ -15,7 +15,7 @@ With dependencies installed and repo cloned:
 
 ## Usage
 
-Click and drag anywhere on the screen to make a selection.
+Click and drag anywhere on the screen to make a selection, or screenshot a window by clicking on it.
 
 A selection made with the left mouse button will be automatically copied to the clipboard.
 
@@ -28,4 +28,5 @@ It is recommended that you assign xsnip to a keybind in your window manager for 
 ## Configuration
 The saved screenshot directory, poll rate, quit key, and cursor glyph can all be changed from their default values by editing the corresponding macros at the top of `xsnip.c` and recompiling.
 
-If you experience strange behavior when the program is running, such as a black or blurry screen, recompile with the `OPAQUE` macro set to `true`. You should also do this if your window manager/compositor does not support transparency.
+If you experience strange behavior when the program is running, such as a black or blurry screen, run xsnip in opaque mode with the flag `-o`, or recompile with the `OPAQUE` macro set to `true` to set it as the default. When the default mode is opaque, you can run in transparent mode with the `-t` flag. 
+You should compile in opaque mode if your window manager/compositor does not support transparency.

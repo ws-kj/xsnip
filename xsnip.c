@@ -13,7 +13,6 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -32,12 +31,12 @@
 
 #include "config.h"
 
-// Globals so we can exit without leaks on failure anywhere
 Display* display;
 Window   root;
 Window   overlay;
 XImage*  img;
 Cursor   cursor;
+Pixmap pm;
 
 char*    fpath;
 uint8_t* buffer;
@@ -45,6 +44,7 @@ uint8_t* keymap;
 
 int32_t exit_clean(char* err) {	
 	if(img) XDestroyImage(img);
+	if(pm)  XFreePixmap(display, pm);
 	XUnmapWindow(display, overlay);
 	XFreeCursor(display, cursor);
 
@@ -164,7 +164,7 @@ int main(int argc, char** argv) {
 		XSelectInput(display, root, ExposureMask);
 		XEvent evt;
 		XSendEvent(display, root, true, ExposureMask, &evt);
-		img = XGetImage(display, root, 0, 0, gwa.width, gwa.height, AllPlanes, ZPixmap);
+		img = XGetImage(display, root, 0, 0, gwa.width, gwa.height, AllPlanes, ZPixmap);	
 	}
 
 	// We create a transparent window so that drawing the box
@@ -176,6 +176,13 @@ int main(int argc, char** argv) {
 		vinfo.visual,
 		CWOverrideRedirect | CWColormap | CWBackPixel | CWBorderPixel,
 		&attrs);
+
+	// Must be done after overlay is created
+	if(OPAQUE) {
+		pm = XCreatePixmap(display, overlay, gwa.width, gwa.height, 24);
+		XPutImage(display, overlay, XCreateGC(display, overlay, 0, 0), img, 0, 0, 0, 0, gwa.width, gwa.height);	
+	}
+
 	XMapWindow(display, overlay);
 
 	GC gc;
@@ -186,7 +193,6 @@ int main(int argc, char** argv) {
 	gcval.plane_mask = gcval.background ^ gcval.foreground;
 	gcval.subwindow_mode = IncludeInferiors;
 	gc = XCreateGC(display, overlay, GCFunction | GCForeground | GCBackground | GCSubwindowMode, &gcval);
-
 
 	cursor = XCreateFontCursor(display, CURSOR);
 	XDefineCursor(display, overlay, cursor);
@@ -240,8 +246,10 @@ int main(int argc, char** argv) {
 		}
 
 		if(OPAQUE)
-			XPutImage(display, overlay, XCreateGC(display, overlay, 0, 0), img, 0, 0, 0, 0, gwa.width, gwa.height);	
-		
+			XPutImage(display, pm, XCreateGC(display, overlay, 0, 0), img, 0, 0, 0, 0, gwa.width, gwa.height);	
+		else
+			XClearArea(display, overlay, 0, 0, gwa.width, gwa.height, false);
+
 		if(grabbing) {
 			// Due to the way XDrawRectange works, we always need to
 			// pass the upper lefthand corner first.
@@ -250,20 +258,18 @@ int main(int argc, char** argv) {
 
 			bex = (mousex > startx) ? mousex-startx+3 : startx-mousex+3;
 			bey = (mousey > starty) ? mousey-starty+3 : starty-mousey+1;
-
-			if(!OPAQUE) {
-				XClearArea(display, overlay, 0, 0, gwa.width, gwa.height, false);
+			if(OPAQUE)
+				XDrawRectangle(display, pm, gc, bsx, bsy, bex, bey);
+			else
 				XDrawRectangle(display, overlay, gc, bsx, bsy, bex, bey);
-			} else {
-				// This works, but the Exposure event is not being 
-				// properly generated which causes flickering. 
-				XSendEvent(display, root, true, ExposureMask, &evt);
-				XDrawRectangle(display, overlay, gc, bsx, bsy, bex, bey);
-			}
-		
 		}
-		XFlush(display);
 
+		if(OPAQUE) {
+			XClearArea(display, overlay, 0, 0, gwa.width, gwa.height, false);
+			XSetWindowBackgroundPixmap(display, overlay, pm);
+		}
+
+		XFlush(display);
 		usleep(POLLRATE * 1000); // Experiment as needed.
 	}
 

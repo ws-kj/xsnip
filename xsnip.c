@@ -36,7 +36,8 @@ Window   root;
 Window   overlay;
 XImage*  img;
 Cursor   cursor;
-Pixmap pm;
+Pixmap   pm;
+GC 		 gc;
 
 char*    fpath;
 uint8_t* buffer;
@@ -45,6 +46,7 @@ uint8_t* keymap;
 int32_t exit_clean(char* err) {	
 	if(img) XDestroyImage(img);
 	if(pm)  XFreePixmap(display, pm);
+	if(gc)  XFreeGC(display, gc);
 	XUnmapWindow(display, overlay);
 	XFreeCursor(display, cursor);
 
@@ -138,6 +140,8 @@ int32_t create_png(uint8_t* buffer, uint32_t width, uint32_t height, bool save, 
 
 int main(int argc, char** argv) {
 	display = XOpenDisplay(NULL);
+	if(!display) 
+		exit_clean("Failed to open X display\n");
 	root = DefaultRootWindow(display);
 
 	XWindowAttributes gwa;
@@ -185,7 +189,6 @@ int main(int argc, char** argv) {
 
 	XMapWindow(display, overlay);
 
-	GC gc;
 	XGCValues gcval;
 	gcval.foreground = XWhitePixel(display, 0);
 	gcval.function = GXxor;

@@ -38,6 +38,7 @@ XImage*  img;
 Cursor   cursor;
 Pixmap   pm;
 GC 		 gc;
+GC		 ogc;
 XWindowAttributes hoverw;
 
 char*    fpath;
@@ -51,6 +52,7 @@ int32_t exit_clean(char* err) {
 	if(img) XDestroyImage(img);
 	if(pm)  XFreePixmap(display, pm);
 	if(gc)  XFreeGC(display, gc);
+	if(ogc) XFreeGC(display, ogc);
 	XUnmapWindow(display, overlay);
 	XFreeCursor(display, cursor);
 
@@ -206,8 +208,9 @@ int main(int argc, char** argv) {
 
 	// Must be done after overlay is created
 	if(opaque_mode) {
+		ogc = XCreateGC(display, overlay, 0, 0);
 		pm = XCreatePixmap(display, overlay, gwa.width, gwa.height, 24);
-		XPutImage(display, overlay, XCreateGC(display, overlay, 0, 0), img, 0, 0, 0, 0, gwa.width, gwa.height);	
+		XPutImage(display, overlay, ogc, img, 0, 0, 0, 0, gwa.width, gwa.height);	
 	}
 
 	XMapWindow(display, overlay);
@@ -280,7 +283,7 @@ int main(int argc, char** argv) {
 		}
 
 		if(opaque_mode)
-			XPutImage(display, pm, XCreateGC(display, overlay, 0, 0), img, 0, 0, 0, 0, gwa.width, gwa.height);	
+			XPutImage(display, pm, ogc, img, 0, 0, 0, 0, gwa.width, gwa.height);	
 		else
 			XClearArea(display, overlay, 0, 0, gwa.width, gwa.height, false);
 

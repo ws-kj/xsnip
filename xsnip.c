@@ -156,7 +156,7 @@ int main(int argc, char** argv) {
 
 	display = XOpenDisplay(NULL);
 	if(!display) 
-		exit_clean("Failed to open X display\n");
+		return exit_clean("Failed to open X display\n");
 	root = DefaultRootWindow(display);
 
 	// Query windows for hover selection. This may result in undefined

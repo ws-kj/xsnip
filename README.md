@@ -13,6 +13,8 @@ With dependencies installed and repo cloned:
 
 `make install` 
 
+Note that GNU make (gmake on BSD) is required.
+
 ## Usage
 
 Click and drag anywhere on the screen to make a selection, or screenshot a window by clicking on it.

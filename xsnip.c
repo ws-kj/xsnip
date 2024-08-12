@@ -259,14 +259,14 @@ int main(int argc, char** argv) {
 			}
 		}
 
-		if(mask == 256) {			// Left click
+		if(mask & 256) {			// Left click
 			if(!grabbing) {
 				save = false;
 				grabbing = true;
 				startx = mousex;
 				starty = mousey;
 			} 
-		} else if(mask == 1024) {	// Right click
+		} else if(mask & 1024) {	// Right click
 			if(!grabbing) {
 				save = true;
 				grabbing = true;

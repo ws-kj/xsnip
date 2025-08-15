@@ -80,7 +80,7 @@ int32_t create_filename(bool save, char** ts) {
 
 		// 29 = ctime-4 + .png + \0
 		uint32_t tsize = strlen(home) + strlen(SAVEDIR) + 29;		
-		*ts = malloc(sizeof(char) * tsize);
+		*ts = (char *)calloc(tsize, sizeof(char));
 		if(!*ts) 
 			return exit_clean("Could not allocate filename\n");
 
@@ -88,8 +88,8 @@ int32_t create_filename(bool save, char** ts) {
 		strncat(*ts, SAVEDIR, strlen(SAVEDIR)+1);
 	} else {
 		// 34 = ctime-4 + /tmp/ + .png + \0
-		*ts = malloc(sizeof(char) * 34);
-		if(!*ts) 
+		*ts = (char *)calloc(34, sizeof(char));
+		if(!*ts)
 			return exit_clean("Could not allocate filename\n");
 		strncpy(*ts, "/tmp/", 6);
 	}
@@ -235,7 +235,7 @@ int main(int argc, char** argv) {
 	uint32_t bsx, bsy, bex, bey;
 
 	bool save = false;
-	keymap = malloc(sizeof(uint8_t) * 32);
+	keymap = (uint8_t *)calloc(32, sizeof(uint8_t));
 	for(;;) {	
 		// Safe exit on keypress instead of forcing user to take a
 		// screenshot with no width/height.
@@ -320,7 +320,7 @@ int main(int argc, char** argv) {
 		uint32_t gmask = img->green_mask;
 		uint32_t bmask = img->blue_mask;
 		
-		buffer = malloc(sizeof(uint8_t) * width * height * 3);
+		buffer = (uint8_t *)calloc(width * height * 3, sizeof(uint8_t));
 		if(!buffer) {
 			return exit_clean("Could not allocate image buffer\n");
 		}
@@ -358,7 +358,7 @@ int main(int argc, char** argv) {
 		uint32_t gmask = img->green_mask;
 		uint32_t bmask = img->blue_mask;
 
-		buffer = malloc(sizeof(uint8_t) * width * height * 3);
+		buffer = (uint8_t *)calloc(width * height * 3, sizeof(uint8_t));
 		if(!buffer) {
 			return exit_clean("Could not allocate image buffer\n");
 		}
@@ -388,7 +388,7 @@ int main(int argc, char** argv) {
 	// many features are completely broken (such as XA_CLIPBOARD).
 	if(!save) {
 		const char* com = "xclip -selection clipboard -target image/png -i '";
-		char* command = malloc(sizeof(char) * (strlen(com) + strlen(fpath) + 2));
+		char* command = (char *)calloc(strlen(com) + strlen(fpath) + 2, sizeof(char));
 		if(!command)
 			return exit_clean("Could not allocate command\n");
 

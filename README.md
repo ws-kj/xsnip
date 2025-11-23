@@ -21,7 +21,7 @@ A selection made with the left mouse button will be automatically copied to the 
 
 A selection made with the right mouse button will be saved under ~/Pictures by default.
 
-You can exit the program without taking a screenshot with the esecape key.
+You can exit the program without taking a screenshot with the escape key.
 
 It is recommended that you assign xsnip to a keybind in your window manager for convenient use.
 
